@@ -1,0 +1,5 @@
+pub const VENDOR_ID: u16 = 0x046d;
+pub const USAGE_PAGE: u16 = 0xff43;
+
+pub const MINIMUM_TEMPERATURE_IN_KELVIN: u16 = 2700;
+pub const MAXIMUM_TEMPERATURE_IN_KELVIN: u16 = 6500;
