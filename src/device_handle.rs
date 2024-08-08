@@ -1,11 +1,11 @@
-use crate::litra::device_handle::DeviceHandle;
+use litra::DeviceHandle;
 
-pub trait DeviceHandleDiscovery {
+pub trait DeviceHandleWithMerids {
     fn minimum_temperature_in_mireds(&self) -> u16;
     fn maximum_temperature_in_mireds(&self) -> u16;
 }
 
-impl DeviceHandleDiscovery for DeviceHandle {
+impl DeviceHandleWithMerids for DeviceHandle {
     fn minimum_temperature_in_mireds(&self) -> u16 {
         153
     }
