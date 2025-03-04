@@ -1,4 +1,5 @@
 use litra::DeviceHandle;
+use log::{error, info};
 use rumqttc::{AsyncClient, QoS};
 use serde_json::{json, Value};
 
@@ -14,9 +15,25 @@ pub struct DeviceBridge {
 
 impl DeviceBridge {
     pub fn new(device_handle: &DeviceHandle) -> DeviceBridge {
-        let serial_number = Box::leak(device_handle.serial_number().unwrap().unwrap().into_boxed_str());
-        let device_model = Box::leak(device_handle.device_type().to_string().into_boxed_str());
-        let device_model_key = Box::leak(device_model.to_lowercase().replace(" ", "-").into_boxed_str());
+        let serial_number = Box::leak(
+            device_handle
+                .serial_number()
+                .unwrap()
+                .unwrap()
+                .into_boxed_str(),
+        );
+        let device_model = Box::leak(
+            device_handle
+                .device_type()
+                .to_string()
+                .into_boxed_str()
+        );
+        let device_model_key = Box::leak(
+            device_model
+                .to_lowercase()
+                .replace(" ", "-")
+                .into_boxed_str(),
+        );
 
         DeviceBridge {
             serial_number,
@@ -25,79 +42,138 @@ impl DeviceBridge {
         }
     }
 
-    pub async fn publish_discovery(&self, mqtt_client: &AsyncClient, discovery_message: Value) {
-        mqtt_client.publish(
-            format!(
-                "homeassistant/light/logitech_{device_model}_{serial_number}/config",
-                device_model = self.device_model_key,
-                serial_number = self.serial_number
-            ),
-            QoS::AtLeastOnce,
-            false,
-            discovery_message.to_string(),
-        ).await.unwrap();
+    pub async fn publish_discovery(
+        &self,
+        mqtt_client: &AsyncClient,
+        discovery_message: Value
+    ) -> () {
+        info!("Publishing discovery");
+
+        let result = mqtt_client
+            .publish(
+                format!(
+                    "homeassistant/light/logitech_{device_model}_{serial_number}/config",
+                    device_model = self.device_model_key,
+                    serial_number = self.serial_number
+                ),
+                QoS::AtLeastOnce,
+                false,
+                discovery_message.to_string(),
+            )
+            .await;
+
+        if let Err(error) = result {
+            error!("Error publishing discovery: {error}");
+        }
     }
 
-    pub async fn publish_availability(&self, mqtt_client: &AsyncClient, available: bool) {
-        mqtt_client.publish(
-            format!(
-                "logitech/{device_model}/{serial_number}/{topic}",
-                device_model = self.device_model_key,
-                serial_number = self.serial_number,
-                topic = mqtt_topic::AVAILABILITY
-            ),
-            QoS::AtLeastOnce,
-            false,
-            match available {
-                true => "online",
-                false => "offline",
-            },
-        ).await.unwrap();
+    pub async fn publish_availability(
+        &self,
+        mqtt_client: &AsyncClient,
+        available: bool
+    ) -> () {
+        info!("Publishing availability");
+
+        let result = mqtt_client
+            .publish(
+                format!(
+                    "logitech/{device_model}/{serial_number}/{topic}",
+                    device_model = self.device_model_key,
+                    serial_number = self.serial_number,
+                    topic = mqtt_topic::AVAILABILITY
+                ),
+                QoS::AtLeastOnce,
+                false,
+                match available {
+                    true => "online",
+                    false => "offline",
+                },
+            )
+            .await;
+
+        if let Err(error) = result {
+            error!("Error publishing availability: {error}");
+        }
     }
 
-    pub async fn publish_state(&self, mqtt_client: &AsyncClient, state: bool) {
-        mqtt_client.publish(
-            format!(
-                "logitech/{device_model}/{serial_number}/{topic}",
-                device_model = self.device_model_key,
-                serial_number = self.serial_number,
-                topic = mqtt_topic::POWER
-            ),
-            QoS::AtLeastOnce,
-            false,
-            match state {
-                true => "ON",
-                false => "OFF",
-            },
-        ).await.unwrap();
+    pub async fn publish_state(
+        &self,
+        mqtt_client: &AsyncClient,
+        state: bool
+    ) -> () {
+        info!("Publishing state");
+
+        let result = mqtt_client
+            .publish(
+                format!(
+                    "logitech/{device_model}/{serial_number}/{topic}",
+                    device_model = self.device_model_key,
+                    serial_number = self.serial_number,
+                    topic = mqtt_topic::POWER
+                ),
+                QoS::AtLeastOnce,
+                false,
+                match state {
+                    true => "ON",
+                    false => "OFF",
+                },
+            ).await;
+
+        if let Err(error) = result {
+            error!("Error publishing state: {error}");
+        }
     }
 
-    pub async fn publish_brightness(&self, mqtt_client: &AsyncClient, brightness: u16) {
-        mqtt_client.publish(
-            format!(
-                "logitech/{device_model}/{serial_number}/{topic}",
-                device_model = self.device_model_key,
-                serial_number = self.serial_number,
-                topic = mqtt_topic::BRIGHTNESS
-            ),
-            QoS::AtLeastOnce,
-            false,
-            brightness.to_string(),
-        ).await.unwrap();
+    pub async fn publish_brightness(
+        &self,
+        mqtt_client: &AsyncClient,
+        brightness: u16
+    ) -> () {
+        info!("Publishing brightness");
+
+        let result = mqtt_client
+            .publish(
+                format!(
+                    "logitech/{device_model}/{serial_number}/{topic}",
+                    device_model = self.device_model_key,
+                    serial_number = self.serial_number,
+                    topic = mqtt_topic::BRIGHTNESS
+                ),
+                QoS::AtLeastOnce,
+                false,
+                brightness.to_string(),
+            )
+            .await;
+
+        if let Err(error) = result {
+            error!("Error publishing brightness: {error}");
+        }
     }
 
-    pub async fn publish_color_temperature(&self, mqtt_client: &AsyncClient, color_temperature: u16) {
-        mqtt_client.publish(
-            format!(
-                "logitech/{device_model}/{serial_number}/{topic}",
-                device_model = self.device_model_key,
-                serial_number = self.serial_number,
-                topic = mqtt_topic::TEMPERATURE
-            ),
-            QoS::AtLeastOnce,
-            false,
-            color_temperature.to_string(),
-        ).await.unwrap();
+    pub async fn publish_color_temperature(
+        &self,
+        mqtt_client: &AsyncClient,
+        color_temperature: u16,
+    ) -> () {
+        info!("Publishing color temperature");
+
+        let result = mqtt_client
+            .publish(
+                format!(
+                    "logitech/{device_model}/{serial_number}/{topic}",
+                    device_model = self.device_model_key,
+                    serial_number = self.serial_number,
+                    topic = mqtt_topic::TEMPERATURE
+                ),
+                QoS::AtLeastOnce,
+                false,
+                color_temperature.to_string(),
+            )
+            .await;
+
+        if let Err(error) = result {
+            error!("Error publishing color temperature: {error}");
+        }
     }
 
     pub fn create_discovery_message(&self, device_handle: &DeviceHandle) -> Value {
@@ -108,7 +184,7 @@ impl DeviceBridge {
         let device_min = device_handle.minimum_brightness_in_lumen();
         let device_max = device_handle.maximum_brightness_in_lumen();
 
-        return json!({
+        json!({
             "~": format!("logitech/{device_model_key}/{serial_number}"),
             "device_class": "light",
             "supported_color_modes": [
@@ -116,6 +192,7 @@ impl DeviceBridge {
                 // todo: add rgb for beam lx
             ],
             "unique_id": format!("logitech_{device_model}_{serial_number}", device_model = device_model.replace(" ", "_")).to_lowercase(),
+            "object_id": format!("logitech_{device_model}_{serial_number}", device_model = device_model.replace(" ", "_")).to_lowercase(),
             "device": {
                 "name": format!("Logitech {device_model}"),
                 "identifiers": serial_number,
@@ -143,6 +220,6 @@ impl DeviceBridge {
 
             // round value to closest 00 for color temp
             "color_temp_command_template": "{{ (1000000 / value / 100) | int * 100 }}"
-        });
+        })
     }
 }

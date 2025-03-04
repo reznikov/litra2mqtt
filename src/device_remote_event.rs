@@ -17,7 +17,9 @@ impl fmt::Display for DeviceRemoteEvent {
         match self {
             DeviceRemoteEvent::Power(value) => write!(f, "Power {}", value),
             DeviceRemoteEvent::BrightnessInLumen(value) => write!(f, "Brightness {} lm", value),
-            DeviceRemoteEvent::ColorTemperatureInKelvin(value) => write!(f, "Color temperature {} K", value),
+            DeviceRemoteEvent::ColorTemperatureInKelvin(value) => {
+                write!(f, "Color temperature {} K", value)
+            }
             DeviceRemoteEvent::Unknown(message) => write!(f, "Unknown event: {:?}", message),
         }
     }
