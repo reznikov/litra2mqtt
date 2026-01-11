@@ -1,5 +1,6 @@
 use std::fmt;
 
+use log::{error, warn};
 use rumqttc::Publish;
 use serde::{Deserialize, Serialize};
 
@@ -41,7 +42,13 @@ impl fmt::Display for DeviceRemoteEvent {
 
 impl DeviceRemoteEvent {
     pub fn from_mqtt_message(message: Publish, current_state: &DeviceState) -> Self {
-        let payload = std::str::from_utf8(&message.payload).unwrap();
+        let payload = match std::str::from_utf8(&message.payload) {
+            Ok(p) => p,
+            Err(e) => {
+                error!("Failed to decode MQTT payload as UTF-8: {} - topic: {}", e, message.topic);
+                return DeviceRemoteEvent::Unknown(format!("Invalid UTF-8 payload: {}", e));
+            }
+        };
 
         match serde_json::from_str::<CommandPayload>(payload) {
             Ok(cmd) => {
@@ -63,8 +70,8 @@ impl DeviceRemoteEvent {
                     if color_temp > 0 {
                         new_state.temperature = (1000000.0 / color_temp as f64) as u16;
                     } else {
-                        // Invalid color_temp, keep current value
-                        // Log warning in real implementation
+                        warn!("Invalid color_temp value (0) in command, keeping current value: {} - topic: {}", 
+                              current_state.temperature, message.topic);
                     }
                 }
                 
@@ -84,6 +91,8 @@ impl DeviceRemoteEvent {
                 DeviceRemoteEvent::StateUpdate(new_state)
             }
             Err(e) => {
+                error!("Failed to parse MQTT command payload: {} - payload: {} - topic: {}", 
+                       e, payload, message.topic);
                 DeviceRemoteEvent::Unknown(format!("Failed to parse command: {} - payload: {}", e, payload))
             }
         }
