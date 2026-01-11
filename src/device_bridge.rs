@@ -5,6 +5,7 @@ use serde_json::{json, Value};
 
 use crate::device_handle::DeviceHandleWithMerids;
 use crate::mqtt_topic;
+use crate::state::DeviceState;
 
 #[derive(Copy, Clone)]
 pub struct DeviceBridge {
@@ -42,22 +43,24 @@ impl DeviceBridge {
         }
     }
 
+    pub fn device_id(&self) -> String {
+        format!("logitech_{}_{}", self.device_model_key, self.serial_number)
+    }
+
     pub async fn publish_discovery(
         &self,
         mqtt_client: &AsyncClient,
         discovery_message: Value
     ) -> () {
-        info!("Publishing discovery");
+        info!("Publishing discovery for device: {}", self.device_id());
 
+        let topic = mqtt_topic::discovery_topic(&self.device_id());
+        
         let result = mqtt_client
             .publish(
-                format!(
-                    "homeassistant/light/logitech_{device_model}_{serial_number}/config",
-                    device_model = self.device_model_key,
-                    serial_number = self.serial_number
-                ),
+                topic,
                 QoS::AtLeastOnce,
-                false,
+                true, // retain discovery messages
                 discovery_message.to_string(),
             )
             .await;
@@ -72,18 +75,15 @@ impl DeviceBridge {
         mqtt_client: &AsyncClient,
         available: bool
     ) -> () {
-        info!("Publishing availability");
+        info!("Publishing availability for device: {} - {}", self.device_id(), available);
 
+        let topic = mqtt_topic::availability_topic(&self.device_id());
+        
         let result = mqtt_client
             .publish(
-                format!(
-                    "logitech/{device_model}/{serial_number}/{topic}",
-                    device_model = self.device_model_key,
-                    serial_number = self.serial_number,
-                    topic = mqtt_topic::AVAILABILITY
-                ),
+                topic,
                 QoS::AtLeastOnce,
-                false,
+                true, // retain availability
                 match available {
                     true => "online",
                     false => "offline",
@@ -99,24 +99,27 @@ impl DeviceBridge {
     pub async fn publish_state(
         &self,
         mqtt_client: &AsyncClient,
-        state: bool
+        state: &DeviceState
     ) -> () {
-        info!("Publishing state");
+        info!("Publishing state for device: {}", self.device_id());
+
+        let topic = mqtt_topic::state_topic(&self.device_id());
+        
+        let state_json = json!({
+            "state": if state.power { "ON" } else { "OFF" },
+            "brightness": state.brightness,
+            "color_temp": (1000000.0 / state.temperature as f64) as u16, // Convert K to mireds
+            "revision": state.revision,
+            "timestamp": state.timestamp,
+            "origin": state.origin,
+        });
 
         let result = mqtt_client
             .publish(
-                format!(
-                    "logitech/{device_model}/{serial_number}/{topic}",
-                    device_model = self.device_model_key,
-                    serial_number = self.serial_number,
-                    topic = mqtt_topic::POWER
-                ),
+                topic,
                 QoS::AtLeastOnce,
-                false,
-                match state {
-                    true => "ON",
-                    false => "OFF",
-                },
+                true, // retain state
+                state_json.to_string(),
             ).await;
 
         if let Err(error) = result {
@@ -124,102 +127,46 @@ impl DeviceBridge {
         }
     }
 
-    pub async fn publish_brightness(
-        &self,
-        mqtt_client: &AsyncClient,
-        brightness: u16
-    ) -> () {
-        info!("Publishing brightness");
-
-        let result = mqtt_client
-            .publish(
-                format!(
-                    "logitech/{device_model}/{serial_number}/{topic}",
-                    device_model = self.device_model_key,
-                    serial_number = self.serial_number,
-                    topic = mqtt_topic::BRIGHTNESS
-                ),
-                QoS::AtLeastOnce,
-                false,
-                brightness.to_string(),
-            )
-            .await;
-
-        if let Err(error) = result {
-            error!("Error publishing brightness: {error}");
-        }
-    }
-
-    pub async fn publish_color_temperature(
-        &self,
-        mqtt_client: &AsyncClient,
-        color_temperature: u16,
-    ) -> () {
-        info!("Publishing color temperature");
-
-        let result = mqtt_client
-            .publish(
-                format!(
-                    "logitech/{device_model}/{serial_number}/{topic}",
-                    device_model = self.device_model_key,
-                    serial_number = self.serial_number,
-                    topic = mqtt_topic::TEMPERATURE
-                ),
-                QoS::AtLeastOnce,
-                false,
-                color_temperature.to_string(),
-            )
-            .await;
-
-        if let Err(error) = result {
-            error!("Error publishing color temperature: {error}");
-        }
-    }
-
     pub fn create_discovery_message(&self, device_handle: &DeviceHandle) -> Value {
+        let device_id = self.device_id();
         let serial_number = self.serial_number;
         let device_model = self.device_model;
-        let device_model_key = self.device_model_key;
 
         let device_min = device_handle.minimum_brightness_in_lumen();
         let device_max = device_handle.maximum_brightness_in_lumen();
 
         json!({
-            "~": format!("logitech/{device_model_key}/{serial_number}"),
+            "name": format!("Logitech {}", device_model),
+            "unique_id": device_id,
+            "object_id": device_id,
             "device_class": "light",
-            "supported_color_modes": [
-                "color_temp"
-                // todo: add rgb for beam lx
-            ],
-            "unique_id": format!("logitech_{device_model}_{serial_number}", device_model = device_model.replace(" ", "_")).to_lowercase(),
-            "object_id": format!("logitech_{device_model}_{serial_number}", device_model = device_model.replace(" ", "_")).to_lowercase(),
+            "supported_color_modes": ["color_temp"],
+            
             "device": {
-                "name": format!("Logitech {device_model}"),
-                "identifiers": serial_number,
+                "name": format!("Logitech {}", device_model),
+                "identifiers": [device_id.clone()],
                 "manufacturer": "Logitech",
                 "model": device_model,
                 "serial_number": serial_number,
             },
 
-            "availability_topic": format!("~/{}", mqtt_topic::AVAILABILITY),
-            "state_topic": format!("~/{}", mqtt_topic::POWER),
-            "command_topic": format!("~/{}/set", mqtt_topic::POWER),
-
+            "availability_topic": mqtt_topic::availability_topic(&device_id),
+            "state_topic": mqtt_topic::state_topic(&device_id),
+            "command_topic": mqtt_topic::command_topic(&device_id),
+            "state_value_template": "{{ value_json.state }}",
+            
             "brightness_scale": device_max - device_min,
-            "brightness_state_topic": format!("~/{}", mqtt_topic::BRIGHTNESS),
-            "brightness_value_template": format!("{{{{ value - {device_min} }}}}"),
-            "brightness_command_topic": format!("~/{}/set", mqtt_topic::BRIGHTNESS),
-            "brightness_command_template": format!("{{{{ value + {device_min} }}}}"),
+            "brightness_value_template": format!("{{{{ (value_json.brightness | int) - {} }}}}", device_min),
+            "brightness_command_template": format!("{{{{ (value | int) + {} }}}}", device_min),
 
             "min_mireds": device_handle.minimum_temperature_in_mireds(),
             "max_mireds": device_handle.maximum_temperature_in_mireds(),
+            "color_temp_value_template": "{{ value_json.color_temp | int }}",
 
-            "color_temp_state_topic": format!("~/{}", mqtt_topic::TEMPERATURE),
-            "color_temp_value_template": "{{ (1000000 / value) | int }}",
-            "color_temp_command_topic": format!("~/{}/set", mqtt_topic::TEMPERATURE),
+            "json_attributes_topic": mqtt_topic::state_topic(&device_id),
+            "json_attributes_template": "{{ {'revision': value_json.revision, 'timestamp': value_json.timestamp, 'origin': value_json.origin} | tojson }}",
 
-            // round value to closest 00 for color temp
-            "color_temp_command_template": "{{ (1000000 / value / 100) | int * 100 }}"
+            "schema": "json",
         })
     }
 }
