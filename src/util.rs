@@ -52,14 +52,6 @@ pub fn get_serial(value: &str) -> Option<String> {
     })
 }
 
-pub fn get_property(value: &str) -> Option<String> {
-    let re = Regex::new(r"logitech/litra-.*/([^/]+)/([^/]+)/set").unwrap();
-    re.captures(value).and_then(|cap| {
-        let state = cap.get(2)?.as_str().to_string();
-        Some(state)
-    })
-}
-
 pub fn get_instance_id() -> String {
     env::var("LITRA_INSTANCE_ID").unwrap_or_else(|_| {
         uuid::Uuid::new_v4().to_string()

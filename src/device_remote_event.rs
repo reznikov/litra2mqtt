@@ -59,7 +59,13 @@ impl DeviceRemoteEvent {
                 
                 if let Some(color_temp) = cmd.color_temp {
                     // Convert mireds to Kelvin
-                    new_state.temperature = (1000000.0 / color_temp as f64) as u16;
+                    // Validate color_temp to avoid division by zero
+                    if color_temp > 0 {
+                        new_state.temperature = (1000000.0 / color_temp as f64) as u16;
+                    } else {
+                        // Invalid color_temp, keep current value
+                        // Log warning in real implementation
+                    }
                 }
                 
                 // Use provided revision/timestamp/origin or default
@@ -124,6 +130,26 @@ mod tests {
                 assert_eq!(state.power, true);
                 assert_eq!(state.brightness, 200);
                 assert_eq!(state.temperature, 4000); // 1000000 / 250 = 4000K
+            }
+            _ => panic!("Expected StateUpdate"),
+        }
+    }
+
+    #[test]
+    fn test_parse_zero_color_temp() {
+        let payload = r#"{"color_temp": 0}"#;
+        let current = DeviceState::new(false, 100, 3000, "test".to_string());
+        
+        let publish = Publish::new(
+            "litra_bridge/device1/command",
+            rumqttc::QoS::AtLeastOnce,
+            payload.as_bytes(),
+        );
+        
+        match DeviceRemoteEvent::from_mqtt_message(publish, &current) {
+            DeviceRemoteEvent::StateUpdate(state) => {
+                // Should keep current temperature when color_temp is 0
+                assert_eq!(state.temperature, 3000);
             }
             _ => panic!("Expected StateUpdate"),
         }
